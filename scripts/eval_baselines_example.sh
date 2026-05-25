@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-: "${DATASETS_ROOT:?Set DATASETS_ROOT to the path of the three CIG datasets}"
+: "${DATASETS_ROOT:=./data}"
 : "${BASELINE_OUTPUTS_ROOT:=baselines/baseline_outputs}"
 : "${METRICS_ROOT:=results/baselines_metrics}"
 : "${BASELINES:=DiFashion GeCo MGCM Pix2PixCM}"

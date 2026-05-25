@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-: "${DATASETS_ROOT:?Set DATASETS_ROOT to the path of the three CIG datasets}"
+: "${DATASETS_ROOT:=./data}"
 : "${MODEL_ID:=black-forest-labs/FLUX.1-dev}"
 : "${OUTPUT_DIR:=runs/styleflow}"
 

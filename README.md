@@ -27,6 +27,10 @@ This repository contains the three enriched CIG benchmarks
 │   ├── train_example.sh
 │   ├── eval_example.sh
 │   └── eval_baselines_example.sh
+├── data/
+│   ├── FashionVC/files/{train.csv, test.csv}
+│   ├── ExpReduced/files/{train.csv, test.csv}
+│   └── FashionTaobao-TB/files/{train.csv, test.csv}
 ├── requirements.txt
 └── LICENSE
 ```
@@ -42,24 +46,123 @@ pip install -r requirements.txt
 
 ### Data layout
 
-The three datasets are expected under `${DATASETS_ROOT}` with the
-following structure, matching the public releases:
+The three enriched CIG benchmarks (FashionVC, ExpReduced,
+FashionTaobao-TB) are shipped with this repository under `data/`. The
+CSV files (multi-granularity free-form instructions) are included
+directly; the corresponding image folders are obtained from the
+original dataset releases as described below (Datasets Download).
 
 ```
-${DATASETS_ROOT}/
+${DATASETS_ROOT}/                          # set DATASETS_ROOT=./data after running the image downloads
 ├── FashionVC/
-│   ├── img/                                # *.jpg files
-│   ├── files/train_full_columns_dif_G.csv  # train pairs + multi-granularity instructions
-│   └── files/test_full_disj.csv            # held-out pairs
+│   ├── img/                                # *.jpg files (downloaded from upstream — see below)
+│   └── files/
+│       ├── train.csv                       # train pairs + 5 instruction columns (detailed/medium/low/empty/dif)
+│       └── test.csv                        # held-out pairs + 4 instruction columns + Type_New for the template
 ├── ExpReduced/
 │   └── ...same structure...
 └── FashionTaobao-TB/
     └── ...same structure...
 ```
 
-Each CSV contains the columns `tshirt` (seed item id), `positive_pant`
-(target item id), and `bottom_description / detailed / medium / low`
-(instructions at four levels of specificity).
+`train.csv` schema: `tshirt, positive_pant, detailed, medium, low,
+empty, dif`. One row per (top, bottom) pair, with one column per
+instruction-specificity level.
+
+`test.csv` schema: `tshirt, positive_pant, detailed, medium, low,
+empty, Type_New`. The DiFashion-style template prompt (the `dif`
+level) is rendered on the fly from `Type_New` at inference and
+evaluation time, so the file does not need to store it explicitly.
+
+**Training-time CSV explosion.** At training time, `FashionDataset`
+*explodes* `train.csv` into a long table with one row per
+(top, bottom, prompt-level) triple, so a single epoch traverses every
+pair under every requested instruction level exactly once (5x by
+default). `__getitem__` then reads the per-row prompt directly — no
+stochastic in-dataloader prompt sampling. Pass
+`--prompt_levels detailed,medium,low,empty,dif` (default) to control
+which subset of levels is exposed.
+
+By default all paths point at `./data` (i.e., the bundled folder);
+override with `--datasets_root ${DATASETS_ROOT}` if you keep the
+datasets elsewhere.
+
+# Datasets Download
+
+Due to a size limit, only the train and test splits of the dataset have been uploaded at this time.
+The validation splits will be shared once possible.
+
+
+The dataset files (in CSV format) are provided in the ```datasets``` directory. The structure of the folder is as follows:
+<!-- ```
+├── datasets/
+│   ├── FashionVC/
+│   │   ├── files/      
+│   │   ├── img/        
+│   ├── ExpReduced/
+│   │   ├── files/      
+│   │   ├── img/        
+│   ├── FashionTaobaoTB/
+│   │   ├── files/      
+│   │   ├── img/ 
+``` -->
+```
+datasets/
+├── FashionVC/
+│   ├── files/
+│   ├── img/
+├── ExpReduced/
+│   ├── files/
+│   ├── img/
+├── FashionTaobaoTB/
+│   ├── files/
+│   ├── img/
+
+```
+
+## FashionVC and ExpReduced
+
+To download the images for the `FashionVC` and `ExpReduced` datasets, follow these steps:
+
+1. Clone the dataset repository:
+```sh
+git clone https://bitbucket.org/Jay_Ren/fashion_recommendation_tkde2018_code_dataset.git
+```
+2. Extract the image files:
+```sh
+unzip ./fashion_recommendation_tkde2018_code_dataset/img.zip -d ./datasets/ExpReduced
+unzip ./fashion_recommendation_tkde2018_code_dataset/FashionVC/img.zip -d ./datasets/FashionVC
+```
+
+## FashionTaobaoTB
+
+To download the images for FashionTaobaoTB, you need to have `Node.js` installed. Please follow these steps:
+
+1. Navigate to the `datasets/FashionTaobaoTB` folder.
+2. Initialize a new Node.js project and install required dependencies:
+```sh
+npm init -y
+npm install superagent csv-parser cli-progress
+npm install -g typescript
+npm install -g tsc
+```
+3. Compile and run the TypeScript script to download the images:
+```sh
+tsc index.ts
+node index.js
+```
+
+If you encounter any errors related to missing types, run the following command to install the necessary Node.js types:
+```sh
+npm i --save-dev @types/node
+```
+
+After the image download finishes, you need to preprocess the images. Please run the following script:
+```sh
+python3 preprocess_imgs.py
+```
+
+**Note**: Due to restrictions, we are unable to share the images directly. If any link is no longer valid, please remove the corresponding entry for the missing image from the CSV files.
 
 ### Train
 

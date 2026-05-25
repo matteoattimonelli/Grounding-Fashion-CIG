@@ -70,8 +70,11 @@ def parse_args(input_args=None):
     # Data
     p.add_argument("--datasets_root", required=True)
     p.add_argument("--datasets", default="fashionvc,expreduced,fashiontaobaotb")
-    p.add_argument("--train_csv_name", default="train_full_columns_dif_G.csv")
-    p.add_argument("--prompt_columns", default="bottom_description")
+    p.add_argument("--train_csv_name", default="train.csv")
+    p.add_argument("--prompt_levels", default="detailed,medium,low,empty,dif",
+                   help="Comma-separated list of instruction levels to expose at "
+                        "training time. The training CSV is exploded so that each "
+                        "(top, bottom) pair produces one row per requested level.")
     p.add_argument("--max_examples_per_dataset", type=int, default=None)
     p.add_argument("--subset_seed", type=int, default=0)
 
@@ -282,12 +285,12 @@ def main():
 
     # ----- Data -----
     dataset_names = [n.strip() for n in args.datasets.split(",") if n.strip()]
-    prompt_columns = [c.strip() for c in args.prompt_columns.split(",") if c.strip()]
+    prompt_levels = [c.strip() for c in args.prompt_levels.split(",") if c.strip()]
     train_dataset = FashionDataset(
         datasets_root=args.datasets_root,
         dataset_names=dataset_names,
         train_csv_name=args.train_csv_name,
-        prompt_columns=prompt_columns,
+        prompt_levels=prompt_levels,
         max_examples_per_dataset=args.max_examples_per_dataset,
         subset_seed=args.subset_seed,
     )

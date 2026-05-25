@@ -3,18 +3,24 @@
 Two datasets are exposed:
 
 * :class:`FashionDataset` — joint training set over FashionVC,
-  ExpReduced, and FashionTaobao-TB. Each ``__getitem__`` returns a
-  (seed top, ground-truth bottom, instruction, dataset name) tuple at
-  the dataset's native resolution (128 / 224 / 512).
+  ExpReduced, and FashionTaobao-TB. The shipped ``train.csv`` files
+  store one row per (top, bottom) pair with five instruction columns
+  (``detailed / medium / low / empty / dif``). At load time we
+  *explode* this wide table into a long table with one row per
+  (top, bottom, prompt-level) triple, so a single epoch traverses each
+  pair under every instruction granularity exactly once. ``__getitem__``
+  therefore reads the per-row prompt directly — no stochastic prompt
+  choice inside the dataloader.
 
 * :class:`FashionPromptDataset` — evaluation dataset for a single
-  benchmark, exposing the seed top tensor at the native resolution and
-  every instruction granularity selected via ``prompt_keys``.
+  benchmark. ``test.csv`` keeps the wide format so each pair is iterated
+  once and a generation is produced for every requested prompt level
+  inside ``generate.py``.
 
-The two CSV files expected per dataset are described in the README.
+The two CSV files (``train.csv`` and ``test.csv``) shipped under
+``data/<DatasetLabel>/files/`` match the schema documented in the
+top-level README.
 """
-
-from __future__ import annotations
 
 import os
 from typing import Dict, List, Optional, Sequence
@@ -33,15 +39,20 @@ DATASET_SPECS: Dict[str, tuple] = {
     "fashiontaobaoTB": ("FashionTaobao-TB", 512),
 }
 
+# Map a logical prompt key to the column name in the wide CSV. ``dif``
+# may or may not be present as a literal column: in ``train.csv`` it is
+# (a pre-rendered template string); in ``test.csv`` only ``Type_New`` is
+# stored and we render the template on the fly.
 PROMPT_COLUMNS: Dict[str, Optional[str]] = {
     "detailed": "detailed",
     "medium":   "medium",
     "low":      "low",
     "empty":    "empty",
-    "dif":      None,  # built from "Type_New" with a template
+    "dif":      "dif",
 }
 
 DIF_TEMPLATE = "A photo of a {category}, on white background, high quality."
+ALL_PROMPT_LEVELS: tuple = ("detailed", "medium", "low", "empty", "dif")
 
 
 def dataset_label(dataset: str) -> str:
@@ -65,11 +76,23 @@ def _build_transform(size: int) -> transforms.Compose:
     ])
 
 
-def _resolve_prompt(row, prompt_key: str) -> str:
+def _format_dif(row) -> str:
+    """Build the DiFashion-style template prompt from the row's category."""
+    cat = str(row.get("Type_New", row.get("Type_Only", "garment"))).strip() or "garment"
+    return DIF_TEMPLATE.format(category=cat)
+
+
+def _resolve_test_prompt(row, prompt_key: str) -> str:
+    """Resolve a single prompt for the wide-format ``test.csv``.
+
+    For ``dif`` we render the template from ``Type_New``. For the other
+    keys we read the column directly and substitute a single-space
+    placeholder if it is empty or missing (so ``empty`` correctly
+    propagates as an unconditional prompt).
+    """
+    if prompt_key == "dif":
+        return _format_dif(row)
     col = PROMPT_COLUMNS[prompt_key]
-    if col is None:  # dif
-        cat = str(row.get("Type_New", row.get("Type_Only", "garment"))).strip() or "garment"
-        return DIF_TEMPLATE.format(category=cat)
     val = row.get(col, "")
     if not isinstance(val, str) or not val.strip():
         return " "
@@ -77,49 +100,77 @@ def _resolve_prompt(row, prompt_key: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Training dataset
+# Training dataset (long format; one row per (pair, prompt-level))
 # ---------------------------------------------------------------------------
 class FashionDataset(Dataset):
-    """Joint training set over the three CIG benchmarks.
+    """Joint training set over the three CIG benchmarks, exploded by
+    prompt level.
 
-    Each sample is returned at the dataset's native resolution
-    (128/224/512) and exposes the seed top image, the ground-truth
-    bottom image, the selected instruction, and the source dataset
-    name. The instruction column is sampled uniformly from
-    ``prompt_columns`` per draw, so a single epoch hits all prompt
-    granularities for each (seed, target) pair.
+    The wide CSV columns ``detailed / medium / low / empty / dif`` are
+    melted into a long table:
+
+    ``tshirt | positive_pant | prompt_level | prompt | data_name | root_path``
+
+    Each (top, bottom) pair therefore yields ``len(prompt_levels)`` rows
+    (5 by default). ``max_examples_per_dataset`` is applied to the
+    *pair* count before exploding, so the same subset of pairs is used
+    across every prompt level.
     """
 
     def __init__(
         self,
         datasets_root: str,
         dataset_names: Sequence[str] = ("fashionvc", "expreduced", "fashiontaobaotb"),
-        train_csv_name: str = "train_full_columns_dif_G.csv",
-        prompt_columns: Sequence[str] = ("bottom_description",),
+        train_csv_name: str = "train.csv",
+        prompt_levels: Sequence[str] = ALL_PROMPT_LEVELS,
         max_examples_per_dataset: Optional[int] = None,
         subset_seed: int = 0,
     ):
         super().__init__()
-        self.prompt_columns = tuple(prompt_columns) or ("bottom_description",)
+        self.prompt_levels = tuple(prompt_levels)
         datasets_root = os.path.abspath(datasets_root)
 
-        frames = []
+        long_frames: List[pd.DataFrame] = []
         for name in dataset_names:
             label, _ = DATASET_SPECS[name]
             csv_path = os.path.join(datasets_root, label, "files", train_csv_name)
             df = pd.read_csv(csv_path)
             if max_examples_per_dataset and len(df) > max_examples_per_dataset:
                 df = df.sample(n=max_examples_per_dataset, random_state=subset_seed).reset_index(drop=True)
-            df["bottom_description"] = df["bottom_description"].fillna(" ")
             df["data_name"] = name
             df["root_path"] = os.path.join(datasets_root, label)
-            for col in self.prompt_columns:
-                if col not in df.columns and col != "dif":
-                    df[col] = df["bottom_description"]
-                if col in df.columns:
-                    df[col] = df[col].fillna(" ")
-            frames.append(df)
-        self.data = pd.concat(frames).sample(frac=1, random_state=subset_seed).reset_index(drop=True)
+            long_frames.append(self._explode(df, self.prompt_levels))
+
+        self.data = pd.concat(long_frames, ignore_index=True)
+        self.data = self.data.sample(frac=1, random_state=subset_seed).reset_index(drop=True)
+
+    @staticmethod
+    def _explode(df: pd.DataFrame, prompt_levels: Sequence[str]) -> pd.DataFrame:
+        """Wide->long melt that handles missing columns and the ``dif``
+        template gracefully. Falls back to a single space for empty /
+        missing prompts so ``empty`` remains a valid unconditional cue."""
+        rows: List[Dict[str, object]] = []
+        has_dif_column = "dif" in df.columns
+        for record in df.to_dict(orient="records"):
+            for level in prompt_levels:
+                if level == "dif":
+                    text = record.get("dif", "") if has_dif_column else ""
+                    if not isinstance(text, str) or not text.strip():
+                        text = _format_dif(record)
+                else:
+                    col = PROMPT_COLUMNS[level]
+                    text = record.get(col, "")
+                    if not isinstance(text, str) or not text.strip():
+                        text = " "
+                rows.append({
+                    "tshirt": record["tshirt"],
+                    "positive_pant": record["positive_pant"],
+                    "prompt_level": level,
+                    "prompt": text,
+                    "data_name": record["data_name"],
+                    "root_path": record["root_path"],
+                })
+        return pd.DataFrame(rows)
 
     def __len__(self) -> int:
         return len(self.data)
@@ -132,18 +183,12 @@ class FashionDataset(Dataset):
         cond_path = os.path.join(row["root_path"], "img", f"{row['tshirt']}.jpg")
         img = tx(Image.open(img_path).convert("RGB"))
         cond = tx(Image.open(cond_path).convert("RGB"))
-
-        # Sample a prompt column for this example.
-        import random
-        prompt_col = random.choice(self.prompt_columns)
-        prompt = str(row.get(prompt_col, " ")) if prompt_col != "dif" else _resolve_prompt(row, "dif")
-        if not prompt.strip():
-            prompt = " "
-
+        prompt = row["prompt"] if isinstance(row["prompt"], str) and row["prompt"].strip() else " "
         return {
             "pixel_values": img,
             "conditioning_pixel_values": cond,
             "prompt": prompt,
+            "prompt_level": row["prompt_level"],
             "data_name": row["data_name"],
         }
 
@@ -155,20 +200,22 @@ def collate_fn(batch):
         "pixel_values": pixel_values,
         "conditioning_pixel_values": cond,
         "captions": [b["prompt"] for b in batch],
+        "prompt_levels": [b["prompt_level"] for b in batch],
         "data_name": [b["data_name"] for b in batch],
     }
 
 
 # ---------------------------------------------------------------------------
-# Evaluation dataset
+# Evaluation dataset (wide format; one row per (top, bottom) pair)
 # ---------------------------------------------------------------------------
 class FashionPromptDataset(Dataset):
     """Per-dataset test-time loader exposing the seed top and one or
-    more instruction strings per item.
+    more instruction strings per pair.
 
     Returns a dict with ``top_id``, ``bottom_id``, ``top`` (seed
-    tensor), and one entry per requested prompt key. Filenames in the
-    generation output follow ``<top_id>_<bottom_id>_template.jpg``.
+    tensor), and one entry per requested prompt key. ``test.csv`` is
+    read in its wide format and each prompt level is resolved per
+    request via :func:`_resolve_test_prompt`.
     """
 
     def __init__(
@@ -177,15 +224,16 @@ class FashionPromptDataset(Dataset):
         dataset: str,
         prompt_keys: Sequence[str],
         image_size: Optional[int] = None,
-        test_csv_name: str = "test_full_disj.csv",
+        test_csv_name: str = "test.csv",
     ):
         super().__init__()
         self.dataset = dataset
         self.prompt_keys = tuple(prompt_keys)
         label, default_size = DATASET_SPECS[dataset]
         self.image_size = image_size or default_size
-        csv_path = os.path.join(os.path.abspath(datasets_root), label, "files", test_csv_name)
-        self.img_dir = os.path.join(os.path.abspath(datasets_root), label, "img")
+        root = os.path.abspath(datasets_root)
+        csv_path = os.path.join(root, label, "files", test_csv_name)
+        self.img_dir = os.path.join(root, label, "img")
         self.rows: List[dict] = pd.read_csv(csv_path).to_dict("records")
         self.transform = transforms.Compose([
             transforms.Resize((self.image_size, self.image_size), Image.BICUBIC),
@@ -207,5 +255,5 @@ class FashionPromptDataset(Dataset):
             "top": self.transform(top_image),
         }
         for key in self.prompt_keys:
-            item[key] = _resolve_prompt(row, key)
+            item[key] = _resolve_test_prompt(row, key)
         return item

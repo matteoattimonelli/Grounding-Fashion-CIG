@@ -494,8 +494,7 @@ def build_styleflow_pipeline(
     ``checkpoint`` can be either:
       * a directory containing ``pytorch_lora_weights.safetensors`` (the
         standard layout produced by ``train.py``), or
-      * a direct path to a ``.safetensors`` / ``.bin`` LoRA file (e.g.
-        the released ``styleflow_cig_OOD_GA8_DIF_lora_weights.safetensors``).
+      * a direct path to a ``.safetensors`` / ``.bin`` LoRA file.
     """
     import os
     transformer = FluxTransformer2DModel.from_pretrained(
