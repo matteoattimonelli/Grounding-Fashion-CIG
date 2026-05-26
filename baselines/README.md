@@ -53,14 +53,12 @@ python -m baselines.DiFashion.train \
   --epochs 50 \
   --batch_size 8 \
   --learning_rate 1e-4 \
-  --img_size 512 \
   --output_dir ./baselines/DiFashion/checkpoint
 ```
 
 **Tunable knobs:** `--learning_rate`, `--epochs`, `--batch_size`,
-`--gradient_accumulation_steps`, `--img_size`, `--guidance_scale`,
-`--max_train_steps`. The provided values match the configuration used
-in the paper.
+`--gradient_accumulation_steps`, `--guidance_scale`, `--max_train_steps`.
+The provided values match the configuration used in the paper.
 
 ### Generate
 
@@ -70,7 +68,7 @@ python -m baselines.DiFashion.generate \
   --mode test \
   --weights_dir ./baselines/DiFashion/checkpoint \
   --save_dir ./baselines/baseline_outputs/DiFashion \
-  --batch_size 1 --img_size 512
+  --batch_size 1
 ```
 
 ### Catalog-alignment retrieval (optional)
@@ -98,7 +96,6 @@ python -m baselines.GeCo.train_geco \
   --num_epochs 50 \
   --train_batch_size 64 \
   --emb_dim 128 \
-  --img_size 128 \
   --learning_rate 1e-4
 ```
 
@@ -111,10 +108,7 @@ validation FID and feed the path to `test.py` / `eval.py`.
 ### Generate / Test
 
 ```bash
-python -m baselines.GeCo.test \
-  --dataset fashionvc \
-  --emb_dim 128 \
-  --img_size 128
+python -m baselines.GeCo.test --dataset fashionvc --emb_dim 128
 ```
 
 Edit `weight_path` and `generator_path` near the top of `test.py` to
@@ -141,7 +135,7 @@ python -m baselines.MGCM_text.train_mgcm \
   --dataset fashionvc \
   --alpha_values 1 --beta_values 0.01 --mi_values 0.1 --ni_values 0.01 \
   --epochs 60 --batch_size 420 --learning_rate 2e-4 \
-  --img_size 64 --out_csv ./baselines/MGCM_text/out.csv
+  --out_csv ./baselines/MGCM_text/out.csv
 ```
 
 `alpha / beta / mi / ni` weight the four loss terms (BPR compatibility,
@@ -152,7 +146,7 @@ appended to `--out_csv`.
 ### Test
 
 ```bash
-python -m baselines.MGCM_text.test --dataset fashionvc --img_size 64
+python -m baselines.MGCM_text.test --dataset fashionvc
 ```
 
 ---
@@ -167,7 +161,7 @@ python -m baselines.Pix2PixCM.train_pix2pixcm \
   --dataset fashionvc \
   --alpha_values 1 --beta_values 0.01 --mi_values 0.1 --ni_values 0.01 \
   --epochs 60 --batch_size 420 --learning_rate 2e-4 \
-  --img_size 64 --out_csv ./baselines/Pix2PixCM/out.csv
+  --out_csv ./baselines/Pix2PixCM/out.csv
 ```
 
 Outputs are at 64×64 by design; upsample at evaluation time only.
@@ -185,7 +179,6 @@ python -m baselines.custom_gan_text.train_cigm \
   --num_epochs 200 \
   --train_batch_size 64 \
   --learning_rate 2e-4 \
-  --img_size 128 \
   --beta1 0.5 \
   --L1Lambda 100 \
   --weights_dir ./baselines/custom_gan_text/weights

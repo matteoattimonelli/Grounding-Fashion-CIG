@@ -31,8 +31,7 @@ This repository contains the three enriched CIG benchmarks
 │   ├── FashionVC/files/{train.csv, test.csv}
 │   ├── ExpReduced/files/{train.csv, test.csv}
 │   └── FashionTaobao-TB/files/{train.csv, test.csv}
-├── requirements.txt
-└── LICENSE
+└── requirements.txt
 ```
 
 ## Quick start
