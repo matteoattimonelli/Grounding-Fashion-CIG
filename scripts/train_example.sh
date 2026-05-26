@@ -20,7 +20,7 @@ accelerate launch \
     --datasets fashionvc,expreduced,fashiontaobaotb \
     --train_batch_size 1 \
     --gradient_accumulation_steps 8 \
-    --max_train_steps 93483 \
+    --max_train_steps 100000 \
     --learning_rate 2e-4 \
     --rank 16 \
     --mixed_precision bf16 \
