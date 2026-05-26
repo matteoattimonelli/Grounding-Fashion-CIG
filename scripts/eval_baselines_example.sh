@@ -13,7 +13,7 @@ set -euo pipefail
 : "${DATASETS_ROOT:=./data}"
 : "${BASELINE_OUTPUTS_ROOT:=baselines/baseline_outputs}"
 : "${METRICS_ROOT:=results/baselines_metrics}"
-: "${BASELINES:=DiFashion GeCo MGCM Pix2PixCM}"
+: "${BASELINES:=DiFashion GeCo MGCM_text Pix2PixCM custom_gan_text}"
 : "${PROMPT_KEYS:=detailed medium low dif}"
 
 mkdir -p "${METRICS_ROOT}"

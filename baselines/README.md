@@ -1,129 +1,230 @@
 # Baselines
 
-This folder documents how the four baselines reported in the main paper
-were trained, run, and evaluated. We do **not** vendor the baselines'
-source code here — each upstream project has its own license. Instead,
-this README gives, for every baseline, (i) the upstream source, (ii) the
-adaptation we applied to consume our free-form instructions, (iii) the
-recipe used for our experiments, and (iv) how to feed the baseline
-outputs into the evaluation scripts under `../eval/`.
+This folder ships the reference implementations of the baselines
+compared against \styleflow in the paper, together with our text-
+extension variants used in the ablations. The folders are:
 
-After running any baseline, place its generated images under
+| Folder | Type | Conditioning | Notes |
+|---|---|---|---|
+| `DiFashion/` | Latent diffusion | seed top + free-form instruction | LDM baseline; closest to \styleflow in modelling family. |
+| `GeCo/` | GAN + retrieval head | seed top → bottom | Joint generation/compatibility loss. |
+| `MGCM_text/` | GAN (compatibility-guided) | seed top + free-form instruction | Text-augmented variant of MGCM. |
+| `Pix2PixCM/` | Image-to-image GAN | seed top → bottom | Text-free baseline; CLIP-Score reported as `--`. |
+| `custom_gan_text/` | GAN | seed top + free-form instruction | CLIP-text-conditioned GAN. |
 
-```
-baseline_outputs/<BaselineName>/<DatasetLabel>/test/prompt_<level>/<top_id>_<bottom_id>_template.jpg
-```
+All scripts read the multi-granularity instructions from the bundled
+`../data/` folder using the standardized `train.csv` and `test.csv`
+filenames (same as `styleflow/data.py`), and write generated images
+under `baseline_outputs/<Baseline>/<DatasetLabel>/test/prompt_<level>/`
+so they can be evaluated with the same protocol as \styleflow
+(`../eval/*` modules).
 
-so that the same `python -m eval.fid_kid`, `eval.lpips_paired`,
-`eval.clip_score`, and `eval.siglip_catalog_alignment` commands documented
-in the top-level README evaluate them with the same protocol used for
-StyleFlow.
+## Common setup
 
----
+Every baseline expects:
 
-## DiFashion (LDM-based, top + template-text)
+* the bundled `../data/` folder (or another `--datasets_root`-compatible
+  path) containing `<DatasetLabel>/files/{train.csv, test.csv}` and a
+  populated `<DatasetLabel>/img/` directory of `.jpg` images (download
+  the upstream images per the top-level README);
+* a Python environment with `torch`, `torchvision`, `pandas`, `Pillow`,
+  `transformers`, and `open_clip_torch` (already installed by the
+  repository's `requirements.txt`).
 
-* Upstream: original DiFashion repository (see paper bibliography for
-  citation; we do not reproduce the URL here because the venue's
-  anonymity rules disallow links that may identify reviewers' searches).
-* License: research-only (consult upstream).
-
-**Adaptation.** DiFashion was originally trained with category-template
-prompts (`"a photo of a <type>"`). We feed it our free-form
-instructions by replacing the prompt fed to its text encoder with the
-appropriate column (`detailed / medium / low` from
-`test_full_disj.csv`, or the template prompt for the `dif` column),
-keeping all other model hyperparameters at their upstream defaults.
-
-**Recipe.** Adapter LoRA training on the same joint dataset for the
-same number of optimisation steps as StyleFlow (93{,}483), bs=1,
-gradient-accumulation 8, AdamW lr 2e-4 cosine, 100 warmup. Inference
-uses DiFashion's default 50-step schedule (we report wall-clock for
-reference in the appendix but do not normalise step counts across
-baselines).
-
-**Outputs.** Following its original I/O convention, save generated
-images as `<top_id>_<bottom_id>_template.jpg` under
-`baseline_outputs/DiFashion/<DatasetLabel>/test/prompt_<level>/`.
-
----
-
-## GeCo (GAN-based, top → bottom)
-
-* Upstream: original GeCo repository.
-* License: research-only.
-
-**Adaptation.** GeCo conditions only on the seed top by default. To
-expose the text channel for a fair comparison with our setting, we
-extend its generator with a frozen pretrained CLIP text encoder and
-inject the pooled text embedding into the latent space via a small
-linear projection trained jointly with the rest of the model. All
-other architectural choices stay at the upstream defaults.
-
-**Recipe.** Default GeCo training hyperparameters at the
-upstream-supported resolutions (128x128) for the same number of epochs
-as in the original paper; only the text-injection module is initialised
-from scratch.
-
-**Outputs.** Save under
-`baseline_outputs/GeCo/<DatasetLabel>/test/prompt_<level>/<top_id>_<bottom_id>_template.jpg`.
-
----
-
-## MGCM (GAN-based, multi-garment compatibility)
-
-* Upstream: original MGCM repository.
-* License: research-only.
-
-**Adaptation.** Same CLIP-text-injection trick as GeCo: we wire a
-frozen pretrained CLIP text encoder into the generator. Compatibility
-discriminator and StyleGAN-style prior are kept at upstream defaults.
-Outputs are saved at the upstream-supported 64x64 resolution and then
-upsampled at evaluation time only.
-
-**Recipe.** Upstream defaults; we report the published numbers in the
-ablation tables for cross-checking.
-
-**Outputs.** Save under
-`baseline_outputs/MGCM/<DatasetLabel>/test/prompt_<level>/<top_id>_<bottom_id>_template.jpg`.
-
----
-
-## Pix2PixCM (GAN-based, no text)
-
-* Upstream: image-to-image translation variant used in MGCM's paper
-  (Pix2Pix with a compatibility head).
-* License: research-only.
-
-**Adaptation.** Pix2PixCM is a pure image-to-image baseline and does
-not consume text by design. We include it as a text-free reference. It
-is therefore evaluated only on FID/KID/LPIPS; CLIP-Score is reported as
-`--` in the tables.
-
-**Recipe.** Upstream defaults at the supported 64x64 resolution.
-
-**Outputs.** Save under
-`baseline_outputs/Pix2PixCM/<DatasetLabel>/test/prompt_<level>/<top_id>_<bottom_id>_template.jpg`.
-
----
-
-## Evaluating any baseline with our scripts
-
-Once a baseline's outputs follow the layout above, run the same four
-commands as for StyleFlow, just pointing at the new directory:
+Working directory matters: the scripts resolve paths relative to
+`os.getcwd()`, so run them from the repository root:
 
 ```bash
-# Example for DiFashion / FashionVC / detailed
-GEN_DIR=baselines/baseline_outputs/DiFashion/FashionVC/test/prompt_detailed
-
-python -m eval.fid_kid     --reference_dir ${DATASETS_ROOT}/FashionVC/img --generated_dir ${GEN_DIR}
-python -m eval.lpips_paired --reference_dir ${DATASETS_ROOT}/FashionVC/img --generated_dir ${GEN_DIR}
-python -m eval.clip_score  --datasets_root ${DATASETS_ROOT} --dataset fashionvc \
-                            --generated_dir ${GEN_DIR} --prompt_column detailed
-python -m eval.siglip_catalog_alignment --datasets_root ${DATASETS_ROOT} --dataset fashionvc \
-                                        --generated_dir ${GEN_DIR}
+cd /path/to/Grounding-Fashion-CIG
 ```
 
-`../scripts/eval_baselines_example.sh` runs the full sweep across the
-four baselines, three datasets, and four prompt levels, mirroring the
-StyleFlow sweep in `../scripts/eval_example.sh`.
+---
+
+## DiFashion
+
+A latent-diffusion baseline. We train a LoRA adapter and a free-form-
+instruction conditioning head, then generate per prompt level.
+
+### Train
+
+```bash
+python -m baselines.DiFashion.train \
+  --dataset fashionvc \
+  --epochs 50 \
+  --batch_size 8 \
+  --learning_rate 1e-4 \
+  --img_size 512 \
+  --output_dir ./baselines/DiFashion/checkpoint
+```
+
+**Tunable knobs:** `--learning_rate`, `--epochs`, `--batch_size`,
+`--gradient_accumulation_steps`, `--img_size`, `--guidance_scale`,
+`--max_train_steps`. The provided values match the configuration used
+in the paper.
+
+### Generate
+
+```bash
+python -m baselines.DiFashion.generate \
+  --dataset fashionvc \
+  --mode test \
+  --weights_dir ./baselines/DiFashion/checkpoint \
+  --save_dir ./baselines/baseline_outputs/DiFashion \
+  --batch_size 1 --img_size 512
+```
+
+### Catalog-alignment retrieval (optional)
+
+```bash
+python -m baselines.DiFashion.catalog_alignment --dataset fashionvc
+```
+
+---
+
+## GeCo
+
+A GAN-based CIG baseline trained jointly with a retrieval/compatibility
+loss. Three CLI scripts:
+
+### Train (sweeps over $\alpha, \beta, \gamma, \tau$)
+
+```bash
+python -m baselines.GeCo.train_geco \
+  --dataset fashionvc \
+  --alpha_values 0.5 \
+  --beta_values 1.0 \
+  --gamma_values 0.01 \
+  --tau_values 0.1 \
+  --num_epochs 50 \
+  --train_batch_size 64 \
+  --emb_dim 128 \
+  --img_size 128 \
+  --learning_rate 1e-4
+```
+
+`--alpha_values / --beta_values / --gamma_values / --tau_values` accept
+a list (`nargs='+'`) so a full grid sweep can be launched with one
+invocation. Best (alpha, beta, gamma, tau) for each dataset are stored
+implicitly in the checkpoint filename; pick the best per dataset on
+validation FID and feed the path to `test.py` / `eval.py`.
+
+### Generate / Test
+
+```bash
+python -m baselines.GeCo.test \
+  --dataset fashionvc \
+  --emb_dim 128 \
+  --img_size 128
+```
+
+Edit `weight_path` and `generator_path` near the top of `test.py` to
+point at the checkpoints produced by the training sweep (the script
+contains commented examples for each dataset).
+
+### Catalog-alignment retrieval
+
+```bash
+python -m baselines.GeCo.eval --dataset fashionvc --emb_dim 128
+```
+
+---
+
+## MGCM_text
+
+GAN trained with a compatibility-guided loss and free-form instruction
+conditioning (frozen CLIP text encoder + small projection trained jointly).
+
+### Train
+
+```bash
+python -m baselines.MGCM_text.train_mgcm \
+  --dataset fashionvc \
+  --alpha_values 1 --beta_values 0.01 --mi_values 0.1 --ni_values 0.01 \
+  --epochs 60 --batch_size 420 --learning_rate 2e-4 \
+  --img_size 64 --out_csv ./baselines/MGCM_text/out.csv
+```
+
+`alpha / beta / mi / ni` weight the four loss terms (BPR compatibility,
+adversarial, mutual-information, identity); start from the listed
+defaults and grid-search around them per dataset. Per-run results are
+appended to `--out_csv`.
+
+### Test
+
+```bash
+python -m baselines.MGCM_text.test --dataset fashionvc --img_size 64
+```
+
+---
+
+## Pix2PixCM
+
+A text-free image-to-image GAN (Pix2Pix + compatibility head). Trained
+with the same loss-weight CLI as `MGCM_text`.
+
+```bash
+python -m baselines.Pix2PixCM.train_pix2pixcm \
+  --dataset fashionvc \
+  --alpha_values 1 --beta_values 0.01 --mi_values 0.1 --ni_values 0.01 \
+  --epochs 60 --batch_size 420 --learning_rate 2e-4 \
+  --img_size 64 --out_csv ./baselines/Pix2PixCM/out.csv
+```
+
+Outputs are at 64×64 by design; upsample at evaluation time only.
+
+---
+
+## custom_gan_text
+
+CLIP-text-conditioned generator/discriminator pair used in the
+text-augmented ablation.
+
+```bash
+python -m baselines.custom_gan_text.train_cigm \
+  --dataset fashionvc \
+  --num_epochs 200 \
+  --train_batch_size 64 \
+  --learning_rate 2e-4 \
+  --img_size 128 \
+  --beta1 0.5 \
+  --L1Lambda 100 \
+  --weights_dir ./baselines/custom_gan_text/weights
+```
+
+`--L1Lambda` weights the pixel-reconstruction loss against the GAN
+adversarial signal; the default `100` mirrors Pix2Pix's recommended
+value.
+
+---
+
+## Evaluating baselines with the StyleFlow metric scripts
+
+Once a baseline has produced its output folder, run the same four
+metrics used for \styleflow:
+
+```bash
+GEN_DIR=baselines/baseline_outputs/DiFashion/FashionVC/test/prompt_detailed
+
+python -m eval.fid_kid \
+  --reference_dir ./data/FashionVC/img \
+  --generated_dir ${GEN_DIR}
+
+python -m eval.lpips_paired \
+  --reference_dir ./data/FashionVC/img \
+  --generated_dir ${GEN_DIR}
+
+python -m eval.clip_score \
+  --datasets_root ./data \
+  --dataset fashionvc \
+  --generated_dir ${GEN_DIR} \
+  --prompt_column detailed
+
+python -m eval.siglip_catalog_alignment \
+  --datasets_root ./data \
+  --dataset fashionvc \
+  --generated_dir ${GEN_DIR}
+```
+
+`../scripts/eval_baselines_example.sh` automates this sweep across
+baselines × datasets × prompt levels, skipping CLIP-Score for the
+text-free `Pix2PixCM`.

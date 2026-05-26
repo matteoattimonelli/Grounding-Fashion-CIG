@@ -247,11 +247,10 @@ and four prompt levels.
 
 ### Baselines
 
-`baselines/README.md` documents how to obtain, adapt, train, and
-evaluate the four baselines reported in the paper (DiFashion, GeCo,
-MGCM, Pix2PixCM). Their source code is not vendored here — each
-upstream project has its own license — but the README gives the exact
-adaptation we applied (free-form instruction wiring) and the recipe
-used. `scripts/eval_baselines_example.sh` runs the same four-metric
-sweep on baseline outputs once they are placed under
+`baselines/README.md` documents how to train and evaluate every baseline
+shipped in this repository (DiFashion, GeCo, MGCM_text, Pix2PixCM,
+custom_gan_text), with per-baseline training commands and the exact
+adaptation used to consume our free-form instructions.
+`scripts/eval_baselines_example.sh` runs the same four-metric sweep on
+baseline outputs once they are placed under
 `baselines/baseline_outputs/<BASELINE>/...`.
