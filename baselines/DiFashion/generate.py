@@ -3,7 +3,6 @@ import os
 import multiprocessing
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from diffusers import FluxControlPipeline
 import torchvision.transforms as transforms
 import argparse
 from PIL import Image
