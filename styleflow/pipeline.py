@@ -30,11 +30,6 @@ from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
 from diffusers.utils.torch_utils import randn_tensor
 
 
-# ---------------------------------------------------------------------------
-# Helpers (mirror the FLUX implementation; kept inline so this file is
-# fully self-contained and does not import private symbols from
-# ``diffusers.pipelines.flux``).
-# ---------------------------------------------------------------------------
 def _calculate_shift(
     image_seq_len: int,
     base_seq_len: int = 256,
