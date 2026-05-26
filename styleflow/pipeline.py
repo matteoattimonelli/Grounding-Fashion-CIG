@@ -8,10 +8,6 @@ input. The ``x_embedder`` projection of the MM-DiT is widened from
 representation; the right half is zero-initialised so that, at training
 start, the model reproduces the pretrained text-to-image behaviour.
 
-This class is **standalone**: it does not inherit from
-``FluxControlPipeline`` or any other FLUX-specific pipeline. It only
-extends :class:`diffusers.DiffusionPipeline` and the standard LoRA /
-single-file / textual-inversion mixins.
 """
 
 import inspect
