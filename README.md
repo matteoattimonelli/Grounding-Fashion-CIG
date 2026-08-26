@@ -1,6 +1,6 @@
 # Grounding Free-Form Instructions for Fashion Complementary Image Generation
 
-Anonymous code repository accompanying the EMNLP 2026 submission
+Anonymous code repository accompanying the paper
 *"Grounding Free-Form Instructions for Fashion Complementary Image Generation"*
 
 This repository contains the three enriched CIG benchmarks
