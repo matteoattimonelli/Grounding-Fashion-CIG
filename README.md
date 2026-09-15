@@ -1,7 +1,7 @@
-# Grounding Free-Form Instructions for Fashion Complementary Image Generation
+# Rethinking Fashion Complementary Image Generation with Free-Form Instructions
 
 Anonymous code repository accompanying the paper
-*"Grounding Free-Form Instructions for Fashion Complementary Image Generation"*
+*"Rethinking Fashion Complementary Image Generation with Free-Form Instructions"*
 
 This repository contains the three enriched CIG benchmarks
 (FashionVC, ExpReduced, FashionTaobao-TB) along with the code for training and evaluating StyleFlow.
