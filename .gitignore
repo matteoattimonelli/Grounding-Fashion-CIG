@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Environments
+.venv/
+.env
+
+# Training and evaluation artifacts (do not check these in — they are
+# reproducible from the data and the training recipe)
+runs/
+results/
+logs/
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+*.pth
+*.tar
+*.zip
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
